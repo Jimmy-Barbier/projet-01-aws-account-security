@@ -6,7 +6,7 @@
 
 ## 📋 Objectif du projet
 
-Mettre en place les bonnes pratiques de sécurité et de gouvernance dès la création d'un compte AWS, conformément aux recommandations du **AWS Well-Architected Framework**.
+Mettre en place les bonnes pratiques de sécurité et de gouvernance sur un compte AWS existant, conformément aux recommandations du **AWS Well-Architected Framework**.
 
 Ce projet démontre qu'une infrastructure cloud sécurisée commence **avant même le premier déploiement**. Il constitue le socle de tous les projets AWS qui suivront.
 
@@ -29,117 +29,137 @@ Compte AWS
 ├── Root (coffre-fort — usage exceptionnel uniquement)
 │   └── MFA activé
 │
-├── IAM Admin (usage quotidien)
+├── IAM Admin — admin-cyber (usage quotidien)
 │   ├── MFA activé
 │   ├── Politique AdministratorAccess
 │   └── URL de connexion personnalisée
 │
 ├── Billing
-│   ├── Alerte budget à 5$
+│   ├── Zero-Spend Budget — alerte dès 0,01$
 │   └── Cost Explorer activé
 │
-└── CloudTrail
-    └── Logs stockés dans bucket S3 dédié
+└── CloudTrail — trail-admin-cyber
+    └── Logs stockés dans bucket S3 dédié (eu-west-3)
 ```
 
 ---
 
 ## 📌 Étapes de configuration
 
-### Étape 1 — Création du compte AWS Free Tier
+### Étape 1 — Configuration initiale du compte AWS
 
-> **Pourquoi :** Le compte root est le compte le plus privilégié d'AWS. Il dispose d'un accès total et irréversible à toutes les ressources. Utiliser une adresse email dédiée permet d'isoler ce compte critique. La carte virtuelle avec plafond bas protège contre les erreurs de facturation accidentelles.
+> **Pourquoi :** Avant toute chose, on vérifie que le compte est correctement configuré avec la bonne région de travail. La région **Europe (Paris) eu-west-3** est privilégiée pour réduire la latence et rester dans la législation européenne (RGPD). Une carte virtuelle avec plafond bas est utilisée pour se protéger contre toute erreur de facturation accidentelle.
 
-- Création du compte sur [aws.amazon.com](https://aws.amazon.com)
-- Adresse email dédiée au compte root
-- Carte virtuelle avec plafond bas (Revolut / Lydia)
+- Connexion au compte AWS avec le compte root
+- Sélection de la région **Europe (Paris) eu-west-3**
+- Carte virtuelle avec plafond bas associée au compte (Revolut / Lydia)
 
-![Dashboard AWS après création](assets/01-dashboard-aws.png)
+![Console AWS — région Europe Paris](assets/01-console-root.png)
 
 ---
 
 ### Étape 2 — Sécurisation du compte Root
 
-> **Pourquoi :** Le compte root est la cible prioritaire des attaquants. Sans MFA, un simple vol de mot de passe suffit à compromettre l'intégralité du compte AWS. Le MFA ajoute une deuxième couche d'authentification qui rend l'accès non autorisé quasi impossible.
+> **Pourquoi :** Le compte root est la cible prioritaire des attaquants. Sans MFA, un simple vol de mot de passe suffit à compromettre l'intégralité du compte AWS. Le MFA ajoute une deuxième couche d'authentification qui rend l'accès non autorisé quasi impossible. AWS confirme la bonne configuration via son tableau de bord IAM avec **0 recommandation de sécurité en attente**.
 
-- Activation du MFA sur le compte root (Google Authenticator / Authy)
-- Définition d'une politique de mot de passe fort
+- MFA activé sur le compte root (Google Authenticator / Authy)
+- Aucune clé d'accès active sur le compte root
 
-![MFA root activé](assets/02-mfa-root.png)
-![Politique de mot de passe](assets/03-password-policy.png)
-
----
-
-### Étape 3 — Création de l'utilisateur IAM Admin
-
-> **Pourquoi :** C'est le principe du moindre privilège appliqué à la gestion du compte. Le root ne doit servir qu'en dernier recours. Pour toutes les opérations quotidiennes, on utilise un utilisateur IAM dédié dont les actions sont traçables et auditables, contrairement au root.
-
-- Création de l'utilisateur IAM dans **IAM → Utilisateurs**
-- Attachement de la politique **AdministratorAccess**
-- Activation du MFA sur l'utilisateur IAM
-- Création d'une URL de connexion personnalisée
-
-![Utilisateur IAM créé](assets/04-iam-admin.png)
-![MFA IAM activé](assets/05-mfa-iam.png)
-![URL connexion personnalisée](assets/06-iam-url.png)
+![MFA root activé — 0 recommandation de sécurité](assets/02-mfa-root.png)
 
 ---
 
-### Étape 4 — Déconnexion Root / Connexion IAM Admin
+### Étape 3 — Renforcement de la politique de mot de passe
+
+> **Pourquoi :** La politique de mot de passe par défaut d'AWS est insuffisante (8 caractères minimum). On la renforce pour qu'elle s'applique à tous les utilisateurs IAM du compte. Une longueur minimale de 14 caractères, une expiration à 90 jours et l'interdiction de réutilisation des 5 derniers mots de passe réduisent considérablement le risque de compromission par force brute ou réutilisation de credentials.
+
+- Longueur minimale portée à **14 caractères**
+- Majuscules, minuscules, chiffres et caractères spéciaux requis
+- Expiration du mot de passe tous les **90 jours**
+- Interdiction de réutilisation des **5 derniers mots de passe**
+
+![Politique de mot de passe renforcée](assets/03-password-policy.png)
+
+---
+
+### Étape 4 — Configuration de l'utilisateur IAM Admin
+
+> **Pourquoi :** C'est le principe du moindre privilège appliqué à la gestion du compte. Le root ne doit servir qu'en dernier recours. Pour toutes les opérations quotidiennes, on utilise un utilisateur IAM dédié **admin-cyber** dont les actions sont traçables et auditables, contrairement au root. Le MFA est également activé sur cet utilisateur pour une double protection.
+
+- Utilisateur IAM **admin-cyber** avec politique **AdministratorAccess**
+- MFA activé sur l'utilisateur IAM
+- Accès console activé avec authentification MFA
+
+![Utilisateur IAM admin-cyber — AdministratorAccess et MFA](assets/04-iam-admin.png)
+
+---
+
+### Étape 5 — URL de connexion IAM personnalisée
+
+> **Pourquoi :** L'URL de connexion IAM personnalisée permet aux utilisateurs IAM de se connecter sans passer par le compte root. Elle remplace le numéro de compte à 12 chiffres par une URL dédiée, plus simple à utiliser et plus professionnelle.
+
+- URL de connexion IAM configurée pour le compte
+
+![URL de connexion IAM](assets/05-iam-url.png)
+
+---
+
+### Étape 6 — Déconnexion Root / Connexion IAM Admin
 
 > **Pourquoi :** À partir de ce moment, le compte root est mis en "coffre-fort". Ne plus l'utiliser au quotidien réduit drastiquement la surface d'attaque. En cas de compromission de l'utilisateur IAM admin, le root reste intact et permet de reprendre le contrôle du compte.
 
 - Déconnexion du compte root
-- Reconnexion avec l'utilisateur IAM admin
+- Reconnexion avec l'utilisateur IAM **admin-cyber**
 - ⚠️ **Le compte root ne sera plus utilisé après cette étape**
 
-![Connexion IAM admin réussie](assets/07-connexion-iam.png)
+![Connexion IAM admin-cyber réussie](assets/06-connexion-iam.png)
 
 ---
 
-### Étape 5 — Alerte Budget AWS
+### Étape 7 — Zero-Spend Budget et alerte de facturation
 
-> **Pourquoi :** AWS facture à l'usage. Une erreur de configuration, une instance oubliée ou une attaque de type cryptojacking peuvent générer des coûts importants en quelques heures. Une alerte à 80% du seuil défini permet d'agir avant d'atteindre la limite.
+> **Pourquoi :** AWS facture à l'usage. Une erreur de configuration, une instance oubliée ou une attaque de type cryptojacking peuvent générer des coûts importants en quelques heures. Un Zero-Spend Budget avec alerte dès **0,01$** permet d'être prévenu immédiatement à la moindre dépense. C'est le filet de sécurité financier le plus strict possible pour un compte de formation.
 
-- Création d'un budget mensuel à **1$** dans **Billing → Budgets**
-- Alerte email configurée à **80%** du budget
+- Zero-Spend Budget mensuel à **1$** configuré
+- Alerte email déclenchée dès **0,01$** dépensé (1% du budget)
 
-![Budget et alerte configurés](assets/08-budget-alerte.png)
+![Zero-Spend Budget et alerte configurés](assets/07-budget-alerte.png)
 
 ---
 
-### Étape 6 — Activation CloudTrail
+### Étape 8 — Activation et configuration de CloudTrail
 
-> **Pourquoi :** CloudTrail enregistre toutes les actions effectuées sur le compte AWS — qui a fait quoi, quand, depuis quelle adresse IP. C'est l'équivalent d'un journal d'audit. En cas d'incident de sécurité, CloudTrail permet de retracer exactement ce qui s'est passé.
+> **Pourquoi :** CloudTrail enregistre toutes les actions effectuées sur le compte AWS — qui a fait quoi, quand, depuis quelle adresse IP. C'est l'équivalent d'un journal d'audit. En cas d'incident de sécurité, CloudTrail permet de retracer exactement ce qui s'est passé. La journalisation multirégion garantit qu'aucune action n'échappe à l'audit, quelle que soit la région utilisée.
 
-- Création d'un trail dans **CloudTrail**
+- Trail **trail-admin-cyber** créé et actif
 - Journalisation activée sur **toutes les régions**
-- Logs stockés dans un **bucket S3 dédié**
+- Logs stockés dans un bucket S3 dédié en **eu-west-3**
 
-![CloudTrail configuré](assets/09-cloudtrail.png)
-![Bucket S3 logs](assets/10-s3-logs.png)
-
----
-
-### Étape 7 — Activation Cost Explorer
-
-> **Pourquoi :** Cost Explorer offre une visualisation détaillée des coûts AWS par service, par région et par période. Couplé aux alertes budget, il permet de comprendre précisément l'origine des coûts et d'optimiser les dépenses. Indispensable pour tout ingénieur cloud.
-
-- Activation dans **Billing → Cost Explorer**
-- Vérification de la remontée des données
-
-![Cost Explorer activé](assets/11-cost-explorer.png)
+![CloudTrail trail-admin-cyber actif](assets/08-cloudtrail-details.png)
+![Bucket S3 dédié aux logs CloudTrail](assets/09-s3-cloudtrail.png)
 
 ---
 
-### Étape 8 — Vérification finale
+### Étape 9 — Activation de Cost Explorer
 
-> **Pourquoi :** AWS fournit dans le tableau de bord IAM une liste de recommandations de sécurité. Vérifier que toutes sont au vert confirme que la configuration est conforme aux bonnes pratiques AWS avant de commencer à déployer des ressources.
+> **Pourquoi :** Cost Explorer offre une visualisation détaillée des coûts AWS par service, par région et par période. Couplé au Zero-Spend Budget, il permet de comprendre précisément l'origine des coûts et d'optimiser les dépenses. Indispensable pour tout ingénieur cloud qui gère des ressources.
+
+- Cost Explorer activé depuis **Billing → Explorateur de coûts**
+- Visualisation des coûts par service disponible
+
+![Cost Explorer activé](assets/10-cost-explorer.png)
+
+---
+
+### Étape 10 — Vérification finale
+
+> **Pourquoi :** AWS fournit dans le tableau de bord IAM une liste de recommandations de sécurité. Vérifier que toutes sont au vert confirme que la configuration est conforme aux bonnes pratiques AWS. Le compteur à **0 recommandation** valide l'ensemble de la démarche.
 
 - Vérification dans **IAM → Tableau de bord**
-- Toutes les recommandations de sécurité AWS au vert ✅
+- **0 recommandation de sécurité** en attente ✅
+- MFA root ✅, MFA IAM ✅, aucune clé d'accès inutilisée ✅
 
-![IAM dashboard au vert](assets/12-iam-dashboard-vert.png)
+![IAM dashboard — 0 recommandation, tout au vert](assets/11-iam-dashboard-final.png)
 
 ---
 
@@ -147,14 +167,17 @@ Compte AWS
 
 | Élément | Statut |
 |---|---|
+| Région de travail | ✅ Europe (Paris) eu-west-3 |
 | MFA Root | ✅ Activé |
+| Politique de mot de passe | ✅ Renforcée (14 car. / 90j / 5 derniers) |
+| Utilisateur IAM Admin | ✅ admin-cyber |
 | MFA IAM Admin | ✅ Activé |
-| Utilisateur IAM Admin | ✅ Créé |
 | Root mis en coffre-fort | ✅ |
-| Alerte budget | ✅ Configurée |
-| CloudTrail | ✅ Actif |
+| Zero-Spend Budget | ✅ Alerte dès 0,01$ |
+| CloudTrail | ✅ Actif multirégion |
+| Bucket S3 logs | ✅ eu-west-3 |
 | Cost Explorer | ✅ Activé |
-| Recommandations IAM | ✅ Au vert |
+| Recommandations IAM | ✅ 0 en attente |
 
 ---
 
